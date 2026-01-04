@@ -57,6 +57,7 @@ func TagsFromMask(mask int32) []string{
 	return tags
 }
 type wordDesc struct{
+	Err string `json:"error"`
 	Word string `json:"word"`
 	Pronunciation string `json:"pronunciation"`
 	Definitions []Definition `json:"definitions"`
@@ -77,7 +78,7 @@ func QueryWord(word string) (*wordDesc, error){
 		}
 		word_desc = &wordDesc{}
 		err = json.Unmarshal([]byte(json_rsp), word_desc)
-		if err != nil{
+		if err != nil || word_desc.Err == "true"{
 			return nil, err
 		}
 		err = insertWord(word_desc)

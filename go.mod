@@ -3,6 +3,7 @@ module github.com/byBit-ovo/coral_word
 go 1.25.4
 
 require (
+	github.com/elastic/go-elasticsearch/v9 v9.2.1
 	github.com/go-deepseek/deepseek v0.8.0
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/joho/godotenv v1.5.1
@@ -15,6 +16,7 @@ require (
 	cloud.google.com/go/auth v0.16.4 // indirect
 	cloud.google.com/go/compute/metadata v0.8.0 // indirect
 	filippo.io/edwards25519 v1.1.0 // indirect
+	github.com/elastic/elastic-transport-go/v8 v8.8.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect

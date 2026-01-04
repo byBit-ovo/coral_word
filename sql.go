@@ -2,7 +2,10 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
+	"os"
 	"sort"
+
 	// "time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -12,7 +15,8 @@ import (
 var db *sql.DB
 func InitSQL() error {
 	var err error
-	db, err = sql.Open("mysql", "root:200533@/coral_word")
+	mysql_url := os.Getenv("MYSQL_URL")
+	db, err = sql.Open("mysql", mysql_url)
 	if err != nil{
 		return err
 	}
@@ -153,6 +157,11 @@ func selectWord(word string) (*wordDesc, error) {
     if err := row.Scan(&wordID, &wordDesc.Word, &wordDesc.Pronunciation, &tag); err != nil {
         return nil, err
     }
+	updateQuery := fmt.Sprintf("update vocabulary set hit_count=hit_count+1 where word = '%s' ", word)
+	_, err = tx.Exec(updateQuery)
+	if err != nil{
+		return nil, err
+	}
     wordDesc.Exam_tags = TagsFromMask(tag)
 
     // 查询 definitions

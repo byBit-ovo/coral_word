@@ -4,77 +4,72 @@ import (
 	_ "context"
 	_ "database/sql"
 	_ "encoding/json"
-	_"fmt"
-	_ "fmt"
+	"fmt"
 	"log"
 	_ "time"
 
 	"github.com/byBit-ovo/coral_word/llm"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/joho/godotenv"
+	"encoding/json"
+	"bytes"
+	
 )
-
-
-func main() {
+func init(){
 	err := godotenv.Load(".env")
 	if err != nil{
 		log.Fatal("Loading env file error")
 	}
-	if llm.InitModels() != nil{
+	if err = llm.InitModels(); err != nil{
 		log.Fatal("InitModels error")
 		return 
 	}
-	if InitSQL() != nil{
+	if err = InitSQL(); err != nil{
 		log.Fatal("Init SQL error")
 	}
-	word, err := QueryWord("puppet")
+	if err = InitEs(); err != nil{
+		log.Fatal("Init es error: ", err)
+	}
+	// json_rsp, err := llm.Models[llm.GEMINI].GetDefinition("empathy")
+	// fmt.Println(json_rsp)
+	word, err := QueryWord("suspect")
 	if err != nil{
 		log.Fatal(err)
 	}
 	showWord(word)
-	// a := 0
-	// defer func(){
-	// 	fmt.Println(a)
-	// }()
-	// a += 1
-	// defer func(){
-	// 	fmt.Println(a)
-	// }()
-	// a += 1
-	// defer func(){
-	// 	fmt.Println(a)
-	// }()
-	// res, err := llm.Models[llm.DEEP_SEEK].GetDefinition("state")
-	// word_1 := wordDesc{}
-	// err = json.Unmarshal([]byte(res), &word_1)
-	// if err != nil{
-	// 	fmt.Print("Unmarshal error: " + err.Error())
-	// }
-	// showWord(&word_1)
-	// db, err := sql.Open("mysql", "root:200533@/coral_word")
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// defer db.Close()
-	// if err := db.Ping(); err != nil {
-	// 	log.Fatal("连接失败:", err)
-	// }
-	// fmt.Println("连接成功！")
-	// var word string
-	// var pronunciation string
-	// var tag int32
-	// var example string
-	// rows, err := db.Query("select word,pronunciation,tag,example from vocabulary where id=?",1)
-	// if err != nil{
-	// 	log.Fatal("query err: "+ err.Error())
-	// 	return
-	// }
-	// for rows.Next(){
+	
+}
+func esSearch(){
+	query := map[string]interface{}{
+        "query": map[string]interface{}{
+            "match_all": map[string]interface{}{},
+        },
+    }
 
-	// }
-	// if err == nil{
-	// 	fmt.Println(word,pronunciation,tag,example)
-	// }
+	var buf bytes.Buffer
+    if err := json.NewEncoder(&buf).Encode(query); err != nil {
+        log.Fatalf("Error encoding query: %s", err)
+    }
+	res, err := EsClient.Search(
+        EsClient.Search.WithIndex("user"), // 索引名称
+        EsClient.Search.WithBody(&buf),        // 查询内容
+		EsClient.Search.WithPretty(),
+    )
+    if err != nil {
+        log.Fatalf("Error getting response: %s", err)
+    }
+    defer res.Body.Close()
+	var result map[string]interface{}
+    if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
+        log.Fatalf("Error parsing response: %s", err)
+    }
 
+    // 打印结果
+    fmt.Println(result)
+}
+func main() {
+	// word := "set"
+	// updateQuery := fmt.Sprintf("update vocabulary set hit_count=hit_count+1 where word = '%s' ", word)
+	// fmt.Println(updateQuery)
 }
 
