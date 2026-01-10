@@ -37,7 +37,7 @@ func aggregateTags(tags []string) int32{
 	}
 	return int32(count)
 }
-func TagsFromMask(mask int32) []string{
+func TagsFromMask(mask int64) []string{
 	tags := []string{}
 	if mask&TagZsb != 0 {
         tags = append(tags, "专升本")

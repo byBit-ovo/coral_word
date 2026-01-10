@@ -28,9 +28,11 @@ func init(){
 	if err = InitSQL(); err != nil{
 		log.Fatal("Init SQL error")
 	}
-	if word,err := selectWordById(19);err != nil{
-		showWord(word)
-	}
+	// var word *wordDesc
+	// if word,err = selectWordById(18);err != nil{
+	// 	fmt.Println(err)
+	// }
+	// showWord(word)
 	// if err = InitEs(); err != nil{
 	// 	log.Fatal("Init es error: ", err)
 	// }
@@ -45,23 +47,23 @@ func init(){
 }
 
 func main() {
-	// sid, err := userLogin("byBit","1234567")
-	// // user, err := insertUser("byBit","200533")
-	// if err != nil{
-	// 	log.Fatal("insert user erro:", err)
-	// }
+	sid, err := userLogin("byBit","1234567")
+	// user, err := insertUser("byBit","200533")
+	if err != nil{
+		log.Fatal("insert user erro:", err)
+	}
 	// // if err := createNoteBook(sid, "我的生词本"); err != nil{
 	// // 	fmt.Println("create_book error: ", err.Error())
 	// // }
-	// words := []string{"rely","doom","reveal","debate"}
-	// for _,word := range words{
-	// 	if err := AddWordToNotebook(sid,word,"我的生词本");err != nil{
-	// 		fmt.Println("AddWordNoteBook error: ", err.Error())
-	// 	}
-	// }
-	// fmt.Println(userSession)
-	// fmt.Println(wordsPool)
-	// fmt.Println(userNoteWords)
+	words := []string{"rely","doom","reveal","debate","metabolism","cyber","stock"}
+	for _,word := range words{
+		if err := AddWordToNotebook(sid,word,"我的生词本");err != nil{
+			fmt.Println("AddWordNoteBook error: ", err.Error())
+		}
+	}
+	fmt.Println(userSession)
+	fmt.Println(wordsPool)
+	fmt.Println(userNoteWords)
 	// fmt.Println("sessionId: ", sid)
 	// id := uuid.New().String()
 	// fmt.Println(id)

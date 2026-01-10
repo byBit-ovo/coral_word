@@ -145,7 +145,7 @@ func minDistance(word1 string, word2 string) int {
 // }
 func selectWordById(wordID int64)(w *wordDesc, err error){
     w = &wordDesc{}
-    var tag int32
+    var tag int64
     tx, err := db.Begin()
     if err != nil {
         return nil, err
@@ -157,7 +157,7 @@ func selectWordById(wordID int64)(w *wordDesc, err error){
 	}()
 
     // 查询主表
-    row := tx.QueryRow("SELECT word, pronunciation, tag FROM vocabulary WHERE word_id = ?", wordID)
+    row := tx.QueryRow("SELECT word, pronunciation, tag FROM vocabulary WHERE id = ?", wordID)
     if err = row.Scan(&w.Word, &w.Pronunciation, &tag); err != nil {
         return nil, err
     }
@@ -173,7 +173,7 @@ func selectWordById(wordID int64)(w *wordDesc, err error){
 func selectWordByName(word string) (w *wordDesc, err error) {
     var wordID int64
     w = &wordDesc{}
-    var tag int32
+    var tag int64
     tx, err := db.Begin()
     if err != nil {
         return nil, err
@@ -198,7 +198,7 @@ func selectWordByName(word string) (w *wordDesc, err error) {
 	return w, nil
 
 }
-func aggWord(wordDesc *wordDesc, tx *sql.Tx, wordID int64, tag int32 )error{
+func aggWord(wordDesc *wordDesc, tx *sql.Tx, wordID int64, tag int64 )error{
 	// updateQuery := fmt.Sprintf("update vocabulary set hit_count=hit_count+1 where word_id = '%d' ", wordID)
 	// _, err := tx.Exec(updateQuery)
 	_, err := tx.Exec("UPDATE vocabulary SET hit_count = hit_count + 1 WHERE id = ?", wordID)
