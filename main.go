@@ -39,21 +39,40 @@ func init(){
 	// }
 	// json_rsp, err := llm.Models[llm.GEMINI].GetDefinition("empathy")
 	// fmt.Println(json_rsp)
-	word, err := QueryWord("kidnap")
-	if err != nil{
-		log.Fatal(err)
-	}
-	showWord(word)
+	// word, err := QueryWord("kidnap")
+	// if err != nil{
+	// 	log.Fatal(err)
+	// }
+	// showWord(word)
 	
 }
-
+func sum(s []int, c chan int) {
+	sum := 0
+	for _, v := range s {
+		sum += v
+	}
+	c <- sum // send sum to c
+}
 func main() {
 	_, err := userLogin("byBit","1234567")
 	// user, err := insertUser("byBit","200533")
 	if err != nil{
 		log.Fatal("insert user erro:", err)
 	}
-	// now := time.Now()
+	s := []int{7, 2, 8, -9, 4, 0}
+
+	c := make(chan int)
+	go sum(s[:len(s)/2], c)
+	go sum(s[len(s)/2:], c)
+	x, y := <-c, <-c // receive from c
+
+	fmt.Println(x, y, x+y)
+
+}
+
+
+func timeTest(){
+		// now := time.Now()
     
     // fmt.Println("当前时间:", now)
     // fmt.Println("年:", now.Year())
