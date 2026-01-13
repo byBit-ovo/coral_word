@@ -1,357 +1,194 @@
 package main
 
 import (
-    _"math"
+    "fmt"
+    "math"
+    "math/rand"
     "sort"
     "time"
-	"fmt"
-	// "rand"
 )
 
-// WordLearning 单词学习记录
-type WordLearning struct {
+// LearningStat 对应 DB 记录，包含算法所需核心数据
+type LearningStat struct {
     WordID             int64
-    Word               string
-    Familiarity        int       // 熟悉度 0-5
+    Familiarity        int       // 0-5
     ConsecutiveCorrect int       // 连续正确次数
-    TotalReviews       int       // 总复习次数
-    CorrectCount       int       // 正确次数
-    WrongCount         int       // 错误次数
-    LastReviewTime     time.Time // 上次复习时间
-    NextReviewTime     time.Time // 下次应复习时间
-    TodayReviews       int       // 今日复习次数
-    TodayCorrect       int       // 今日正确次数
-}
-
-// ReviewSession 复习会话
-type ReviewSession struct {
-    UserID      string
-    BookID      int64
-    Words       []*WordLearning
-    CurrentIdx  int
-    ReviewQueue []*ReviewItem
+    NextReviewTime     time.Time // 下次复习时间
 }
 
 // ReviewItem 复习队列项
 type ReviewItem struct {
-    WordLearning *WordLearning
-    Priority     float64 // 优先级（越高越需要复习）
-    ScheduledAt  int     // 计划在第几轮出现
+    Stat        *LearningStat
+    WordDesc    *wordDesc // 复习时需要展示的单词详情
+    ScheduledAt int       // 轮次 (1,2,3...)
 }
 
-// 基于 SM-2 算法的间隔重复系统
-// 熟悉度对应的复习间隔（天数）
-var intervalDays = map[int]float64{
-    0: 0,      // 新词，当天复习
-    1: 1,      // 1天后
-    2: 3,      // 3天后
-    3: 7,      // 7天后
-    4: 15,     // 15天后
-    5: 30,     // 30天后（已掌握）
+// ReviewSession 会话状态
+type ReviewSession struct {
+    SessionID   string
+    BookID      string
+    ReviewQueue []*ReviewItem
+    CurrentIdx  int
 }
 
-// CalculateNextReview 计算下次复习时间
-func CalculateNextReview(wl *WordLearning, isCorrect bool) time.Time {
-    now := time.Now()
-    
-    if isCorrect {
-        // 答对了，提升熟悉度
-        if wl.Familiarity < 5 {
-            wl.Familiarity++
-        }
-        wl.ConsecutiveCorrect++
-    } else {
-        // 答错了，降低熟悉度
-        wl.Familiarity = max(0, wl.Familiarity-2)
-        wl.ConsecutiveCorrect = 0
-    }
-    
-    // 根据熟悉度计算间隔
-    days := intervalDays[wl.Familiarity]
-    
-    // 根据正确率调整间隔
-    if wl.TotalReviews > 0 {
-        correctRate := float64(wl.CorrectCount) / float64(wl.TotalReviews)
-        if correctRate < 0.6 {
-            days *= 0.5 // 正确率低，缩短间隔
-        } else if correctRate > 0.9 {
-            days *= 1.2 // 正确率高，延长间隔
-        }
-    }
-    
-    return now.Add(time.Duration(days*24) * time.Hour)
-}
-
-// CalculatePriority 计算单词的复习优先级
-func CalculatePriority(wl *WordLearning) float64 {
-    now := time.Now()
-    priority := 0.0
-    
-    // 1. 逾期时间因素（越逾期越优先）
-	// 检查是否已超过截止时间
-    if now.After(wl.NextReviewTime) {
-        overdueDays := now.Sub(wl.NextReviewTime).Hours() / 24
-        priority += overdueDays * 10
-    }
-    
-    // 2. 熟悉度因素（越不熟悉越优先）
-    priority += float64(5-wl.Familiarity) * 5
-    
-    // 3. 错误率因素
-    if wl.TotalReviews > 0 {
-        errorRate := float64(wl.WrongCount) / float64(wl.TotalReviews)
-        priority += errorRate * 20
-    }
-    
-    // 4. 今日复习次数（今日复习少的优先）
-    priority += float64(3-min(wl.TodayReviews, 3)) * 3
-    
-    // 5. 新词优先
-    if wl.TotalReviews == 0 {
-        priority += 15
-    }
-    
-    return priority
-}
-
-// SelectTodayWords 选择今日需要复习的单词
-func SelectTodayWords(userID string, bookID int64, count int) ([]*WordLearning, error) {
-    now := time.Now()
-    // today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-    
-    // 从数据库查询需要复习的单词
-    query := `
-        SELECT word_id, familiarity, consecutive_correct, total_reviews,
-               correct_count, wrong_count, last_review_time, next_review_time,
-               today_reviews, today_correct
-        FROM word_learning
-        WHERE user_id = ? AND book_id = ?
-          AND (next_review_time <= ? OR total_reviews = 0)
-        ORDER BY next_review_time ASC
-        LIMIT ?
-    `
-    
-    rows, err := db.Query(query, userID, bookID, now, count*2)
+// StartReview：开始复习
+func StartReview(uid, bookID string, limit int) (*ReviewSession, error) {
+    // 1. 获取需要复习的记录 (包含算法属性 + 单词详情)
+    stats, err := fetchReviewStats(uid, bookID, limit)
     if err != nil {
         return nil, err
     }
-    defer rows.Close()
-    
-    var words []*WordLearning
-    for rows.Next() {
-        wl := &WordLearning{}
-        err := rows.Scan(
-            &wl.WordID, &wl.Familiarity, &wl.ConsecutiveCorrect,
-            &wl.TotalReviews, &wl.CorrectCount, &wl.WrongCount,
-            &wl.LastReviewTime, &wl.NextReviewTime,
-            &wl.TodayReviews, &wl.TodayCorrect,
-        )
-        if err != nil {
-            return nil, err
-        }
-        words = append(words, wl)
+    if len(stats) == 0 {
+        return nil, fmt.Errorf("no pending reviews for today")
     }
-    
-    // 按优先级排序
-    sort.Slice(words, func(i, j int) bool {
-        return CalculatePriority(words[i]) > CalculatePriority(words[j])
-    })
-    
-    // 取前 count 个
-    if len(words) > count {
-        words = words[:count]
-    }
-    
-    return words, nil
+
+    // 2. 生成多轮次队列
+    queue := generateQueue(stats)
+
+    return &ReviewSession{
+        SessionID:   uid, // 这里直接存 uid 更方便
+        BookID:      bookID,
+        ReviewQueue: queue,
+        CurrentIdx:  0,
+    }, nil
 }
 
-// GenerateReviewQueue 生成复习队列
-// 根据艾宾浩斯遗忘曲线，难词会在一轮复习中多次出现
-func GenerateReviewQueue(words []*WordLearning) []*ReviewItem {
-    var queue []*ReviewItem
-    
-    for _, wl := range words {
-        // 根据熟悉度决定本轮出现次数
-        appearances := CalculateAppearances(wl)
-        
-        for i := 0; i < appearances; i++ {
-            item := &ReviewItem{
-                WordLearning: wl,
-                Priority:     CalculatePriority(wl),
-                ScheduledAt:  calculateSchedulePosition(wl, i, appearances),
+// GetNext 获取下一题
+func (s *ReviewSession) GetNext() *ReviewItem {
+    if s.CurrentIdx >= len(s.ReviewQueue) {
+        return nil
+    }
+    item := s.ReviewQueue[s.CurrentIdx]
+    s.CurrentIdx++
+    return item
+}
+
+// SubmitAnswer 提交并更新进度
+// 简化：直接在 ReviewSession 里处理逻辑，不用每次都去 DB 查一遍 stats
+func (s *ReviewSession) SubmitAnswer(item *ReviewItem, isCorrect bool) error {
+    stat := item.Stat
+    updateAlgorithm(stat, isCorrect)
+    // 实时存库（也可以考虑 Session 结束统一存，但实时更安全）
+    return saveProgress(s.SessionID, s.BookID, stat)
+}
+
+// ---------------------------------------------------------------------------
+// 算法逻辑 (SM-2 简化)
+// ---------------------------------------------------------------------------
+
+func updateAlgorithm(s *LearningStat, isCorrect bool) {
+    if isCorrect {
+        s.ConsecutiveCorrect++
+        if s.Familiarity < 5 {
+            s.Familiarity++
+        }
+    } else {
+        s.ConsecutiveCorrect = 0
+        if s.Familiarity > 0 {
+            s.Familiarity -= 2 // 答错扣分狠一点
+            if s.Familiarity < 0 {
+                s.Familiarity = 0
             }
-            queue = append(queue, item)
+        }
+    }
+
+    // 计算间隔 (Days)
+    intervals := []float64{0.5, 1, 3, 7, 15, 30}
+    days := intervals[s.Familiarity]
+    
+    // 加上微小的随机抖动 (±10%) 防止复习堆积
+    days *= (0.9 + rand.Float64()*0.2) 
+    
+    s.NextReviewTime = time.Now().Add(time.Duration(days*24) * time.Hour)
+}
+
+func generateQueue(stats []*ReviewItem) []*ReviewItem {
+    var queue []*ReviewItem
+    for _, item := range stats {
+        // 出现次数逻辑：Familiarity越低，出现次数越多 (Max 3, Min 1)
+        times := 1
+        if item.Stat.Familiarity <= 1 {
+            times = 3 - item.Stat.Familiarity // 0->3次, 1->2次
+        }
+
+        // 分配轮次
+        for i := 0; i < times; i++ {
+            // 映射到 [1..6] 轮
+            round := 1
+            if times > 1 {
+                // 线性分布：第0次->1轮，第(times-1)次->6轮
+                round = 1 + int(math.Round(float64(i)*5.0/float64(times-1)))
+            }
+            
+            // 深拷贝 item 的一部分引用，或者直接复用指针 (注意 item.Stat 指针共享状态)
+            newItem := *item // 浅拷贝结构体
+            newItem.ScheduledAt = round
+            queue = append(queue, &newItem)
         }
     }
     
-    // 按计划位置排序，并加入随机性
+    // 对队列按 (Round, Random) 排序
+    r := rand.New(rand.NewSource(time.Now().UnixNano()))
     sort.Slice(queue, func(i, j int) bool {
         if queue[i].ScheduledAt != queue[j].ScheduledAt {
             return queue[i].ScheduledAt < queue[j].ScheduledAt
         }
-        return queue[i].Priority > queue[j].Priority
+        // 同轮次内随机
+        return r.Intn(2) == 0
     })
-    
-    // 打乱同一轮次内的顺序，避免机械记忆
-    shuffleWithinRounds(queue)
     
     return queue
 }
 
-// CalculateAppearances 计算单词在本轮应出现的次数
-func CalculateAppearances(wl *WordLearning) int {
-    // 基础出现次数
-    base := 1
-    
-    // 根据熟悉度调整
-    switch wl.Familiarity {
-    case 0:
-        base = 4 // 新词出现4次
-    case 1:
-        base = 3 // 不熟悉出现3次
-    case 2:
-        base = 2 // 一般熟悉出现2次
-    default:
-        base = 1 // 熟悉的出现1次
-    }
-    
-    // 根据今日答错情况调整
-    if wl.TodayReviews > 0 {
-        errorRate := float64(wl.TodayReviews-wl.TodayCorrect) / float64(wl.TodayReviews)
-        if errorRate > 0.5 {
-            base += 2
-        } else if errorRate > 0 {
-            base += 1
-        }
-    }
-    
-    return min(base, 5) // 最多出现5次
-}
+// ---------------------------------------------------------------------------
+// DB 操作简化
+// ---------------------------------------------------------------------------
 
-// calculateSchedulePosition 计算单词在队列中的位置
-func calculateSchedulePosition(wl *WordLearning, appearanceIdx, totalAppearances int) int {
-    // 将复习分成几轮，确保间隔出现
-    // 例如：一个词出现3次，分别在第1轮、第3轮、第5轮出现
-    roundInterval := 6 / totalAppearances
-    return appearanceIdx*roundInterval + 1
-}
-
-// shuffleWithinRounds 在同一轮次内打乱顺序
-func shuffleWithinRounds(queue []*ReviewItem) {
-    // 按轮次分组
-    rounds := make(map[int][]*ReviewItem)
-    for _, item := range queue {
-        rounds[item.ScheduledAt] = append(rounds[item.ScheduledAt], item)
-    }
-    
-    // 打乱每一轮的顺序
-    // for _, items := range rounds {
-    //     rand.Shuffle(len(items), func(i, j int) {
-    //         items[i], items[j] = items[j], items[i]
-    //     })
-    // }
-}
-
-// ProcessAnswer 处理用户答题结果
-func ProcessAnswer(wl *WordLearning, isCorrect bool) error {
-    now := time.Now()
-    
-    // 更新统计
-    wl.TotalReviews++
-    wl.TodayReviews++
-    wl.LastReviewTime = now
-    
-    if isCorrect {
-        wl.CorrectCount++
-        wl.TodayCorrect++
-        wl.ConsecutiveCorrect++
-        
-        // 连续答对，提升熟悉度
-        if wl.ConsecutiveCorrect >= 2 && wl.Familiarity < 5 {
-            wl.Familiarity++
-        }
-    } else {
-        wl.WrongCount++
-        wl.ConsecutiveCorrect = 0
-        
-        // 答错，降低熟悉度
-        wl.Familiarity = max(0, wl.Familiarity-1)
-    }
-    
-    // 计算下次复习时间
-    wl.NextReviewTime = CalculateNextReview(wl, isCorrect)
-    
-    // 更新数据库
-    return updateWordLearning(wl)
-}
-
-// updateWordLearning 更新数据库
-func updateWordLearning(wl *WordLearning) error {
+func fetchReviewStats(uid, bookID string, limit int) ([]*ReviewItem, error) {
+    // JOIN 查询：一次性拿出 复习进度 + 单词基本信息
+    // 优先复习到期的(next <= now)，其次是新词(total=0)
     query := `
-        UPDATE word_learning SET
-            familiarity = ?,
-            consecutive_correct = ?,
-            total_reviews = ?,
-            correct_count = ?,
-            wrong_count = ?,
-            last_review_time = ?,
-            next_review_time = ?,
-            today_reviews = ?,
-            today_correct = ?
-        WHERE word_id = ?
+        SELECT 
+            lr.word_id, lr.familiarity, lr.consecutive_correct, lr.next_review_time,
+            v.word, v.pronunciation
+        FROM learning_record lr
+        JOIN vocabulary v ON lr.word_id = v.id
+        WHERE lr.user_id = ? AND lr.book_id = ? AND lr.next_review_time <= NOW()
+        ORDER BY lr.familiarity ASC, lr.next_review_time ASC
+        LIMIT ?
     `
-    _, err := db.Exec(query,
-        wl.Familiarity, wl.ConsecutiveCorrect,
-        wl.TotalReviews, wl.CorrectCount, wl.WrongCount,
-        wl.LastReviewTime, wl.NextReviewTime,
-        wl.TodayReviews, wl.TodayCorrect,
-        wl.WordID,
-    )
-    return err
-}
-
-
-// StartReviewSession 开始复习会话
-func StartReviewSession(userID string, bookID int64) (*ReviewSession, error) {
-    // 1. 选择今日需要复习的20个单词
-    words, err := SelectTodayWords(userID, bookID, 20)
+    rows, err := db.Query(query, uid, bookID, limit)
     if err != nil {
         return nil, err
     }
-    
-    // 2. 生成复习队列
-    queue := GenerateReviewQueue(words)
-    
-    session := &ReviewSession{
-        UserID:      userID,
-        BookID:      bookID,
-        Words:       words,
-        CurrentIdx:  0,
-        ReviewQueue: queue,
-    }
-    
-    return session, nil
-}
+    defer rows.Close()
 
-// GetNextWord 获取下一个需要复习的单词
-func (s *ReviewSession) GetNextWord() *WordLearning {
-    if s.CurrentIdx >= len(s.ReviewQueue) {
-        return nil // 复习完成
-    }
-    
-    item := s.ReviewQueue[s.CurrentIdx]
-    s.CurrentIdx++
-    
-    return item.WordLearning
-}
+    var list []*ReviewItem
+    for rows.Next() {
+        s := &LearningStat{}
+        w := &wordDesc{} // 只需要 Word 和 Pronunciation 用于展示问题
+        var tsStr string // 兼容部分 driver 对 MySQL datetime 处理
 
-// SubmitAnswer 提交答案
-func (s *ReviewSession) SubmitAnswer(wordID int64, isCorrect bool) error {
-    // 找到对应的单词
-    for _, wl := range s.Words {
-        if wl.WordID == wordID {
-            return ProcessAnswer(wl, isCorrect)
+        // 注意 Scan 顺序
+        if err := rows.Scan(&s.WordID, &s.Familiarity, &s.ConsecutiveCorrect, &tsStr, &w.Word, &w.Pronunciation); err != nil {
+            return nil, err
         }
+        // 简单解析时间，如果 driver 支持 parseTime=true 可直接 scan 到 s.NextReviewTime
+        // 这里暂略时间解析错误处理，假设 DB 返回标准格式
+        // s.NextReviewTime, _ = time.Parse("2006-01-02 15:04:05", tsStr) 
+
+        list = append(list, &ReviewItem{
+            Stat:     s,
+            WordDesc: w,
+        })
     }
-    return fmt.Errorf("word not found in session")
+    return list, nil
+}
+
+func saveProgress(uid, bookID string, s *LearningStat) error {
+    _, err := db.Exec(
+        "UPDATE learning_record SET familiarity=?, consecutive_correct=?, next_review_time=?, total_reviews=total_reviews+1, last_review_time=NOW() WHERE user_id=? AND book_id=? AND word_id=?",
+        s.Familiarity, s.ConsecutiveCorrect, s.NextReviewTime, uid, bookID, s.WordID,
+    )
+    return err
 }

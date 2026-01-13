@@ -24,3 +24,23 @@ CREATE TABLE word_learning (
     UNIQUE KEY unique_user_word (user_id, word_id),
     INDEX idx_next_review (user_id, book_id, next_review_time)
 );
+
+INSERT INTO word_learning (
+    user_id,
+    book_id,
+    word_id,
+    familiarity,
+    consecutive_correct,
+    total_reviews,
+    correct_count,
+    wrong_count,
+    last_review_time,
+    next_review_time,
+    today_reviews,
+    today_correct
+) VALUES (
+    ?, ?, ?,          -- user_id, book_id, word_id
+    0, 0, 0, 0, 0,    -- 新词初始化
+    NULL, NOW(),      -- last_review_time 为空或 NOW()（看你业务），next_review_time 默认 NOW() 代表立即可复习
+    0, 0
+);

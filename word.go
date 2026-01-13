@@ -73,7 +73,7 @@ type wordDesc struct{
 
 func QueryWord(word string) (*wordDesc, error){
 	word_desc, err := selectWordByName(word)
-	choseModel := llm.GEMINI
+	choseModel := llm.DEEP_SEEK
 	if err != nil{
 		json_rsp, err := llm.Models[choseModel].GetDefinition(word)
 		if err != nil{

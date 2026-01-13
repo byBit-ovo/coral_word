@@ -39,7 +39,7 @@ func init(){
 	// }
 	// json_rsp, err := llm.Models[llm.GEMINI].GetDefinition("empathy")
 	// fmt.Println(json_rsp)
-	// word, err := QueryWord("kidnap")
+	// word, err := QueryWord("insulate")
 	// if err != nil{
 	// 	log.Fatal(err)
 	// }
@@ -53,20 +53,30 @@ func sum(s []int, c chan int) {
 	}
 	c <- sum // send sum to c
 }
+func calculatePosition(appearanceIdx, totalAppearances int) int {
+    // 将复习分成几轮，确保间隔出现
+    // 例如：一个词出现3次，分别在第1轮、第3轮、第5轮出现
+    roundInterval := 6 / totalAppearances
+    return appearanceIdx*roundInterval + 1
+}
 func main() {
 	_, err := userLogin("byBit","1234567")
 	// user, err := insertUser("byBit","200533")
 	if err != nil{
 		log.Fatal("insert user erro:", err)
 	}
-	s := []int{7, 2, 8, -9, 4, 0}
+	t := []int{2,1,3,3,4,5,5,5,1,2,3,4,2,2,1,3}
+	for i, c := range t{
+		fmt.Print(calculatePosition(i, c),"  ")
+	}
+	// s := []int{7, 2, 8, -9, 4, 0}
 
-	c := make(chan int)
-	go sum(s[:len(s)/2], c)
-	go sum(s[len(s)/2:], c)
-	x, y := <-c, <-c // receive from c
-
-	fmt.Println(x, y, x+y)
+	// c := make(chan int)
+	// go sum(s[:len(s)/2], c)
+	// go sum(s[len(s)/2:], c)
+	// x, y := <-c, <-c // receive from c
+	// fmt.Println(x, y, x+y)
+	
 
 }
 
