@@ -10,11 +10,7 @@ import (
 	_"github.com/ydb-platform/ydb-go-sdk/v3/log"
 )
 
-var userSession = map[string]string{}
-var wordsPool = map[int64]*wordDesc{}
 
-var userNoteWords = map[string]map[string][]int64{}
-//						  uid       ntbn     wordId
 type User struct{
 	Id string `json:"id"`
 	Name string `json:"name"`
@@ -33,17 +29,17 @@ func userRegister(name, pswd string)(*User, error){
 	return user, nil
 
 }
-func selectNoteBooks(uid string)(map[int64]string, error){
+func selectNoteBooks(uid string)(map[string]string, error){
 	
 	rows, err := db.Query("select book_id,book_name from note_book where user_id=?",uid)
 	if err !=nil{
 		return nil, err
 	}
-	books := map[int64]string{}
+	books := map[string]string{}
 	defer rows.Close()
 	for rows.Next(){
 		var book_name string
-		var book_id int64
+		var book_id string
 		if err:=rows.Scan(&book_id,&book_name); err !=nil{
 			return books,err
 		}
@@ -55,10 +51,10 @@ func selectNoteBooks(uid string)(map[int64]string, error){
 	return books, nil
 
 }
-func selectNoteWords(books map[int64]string)(map[string][]int64, error){
+func selectNoteWords(books map[string]string)(map[string][]int64, error){
 	noteWords := map[string][]int64{}
 	for book_id,book_name := range books{
-		rows, err := db.Query("select word_id from note_word where book_id=?",book_id)
+		rows, err := db.Query("select word_id from learning_record where book_id=?",book_id)
 		if err !=nil{
 			return nil, err
 		}
@@ -85,6 +81,10 @@ func listNoteWords(uid string)error{
 	books, err := selectNoteBooks(uid)
 	if err != nil{
 		return err
+	}
+	for k,v := range books{
+		// uid_bookname: book_id
+		userBookToId[uid+"_"+v] = k
 	}
 	//book_name->[]word_ids
 	noteWords, err := selectNoteWords(books)

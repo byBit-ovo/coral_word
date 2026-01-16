@@ -1,32 +1,31 @@
 package main
 
 import (
+	"bytes"
 	_ "context"
 	_ "database/sql"
+	"encoding/json"
 	_ "encoding/json"
 	"fmt"
-	"log"
-	_ "time"
 	"github.com/byBit-ovo/coral_word/llm"
 	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/google/uuid"
 	"github.com/joho/godotenv"
-	"encoding/json"
-	"bytes"
-	_"strconv"
-	_"github.com/google/uuid"
-	_"time"
-	
+	"log"
+	_ "strconv"
+	_ "time"
 )
-func init(){
+
+func init() {
 	err := godotenv.Load(".env")
-	if err != nil{
+	if err != nil {
 		log.Fatal("Loading env file error")
 	}
-	if err = llm.InitModels(); err != nil{
+	if err = llm.InitModels(); err != nil {
 		log.Fatal("InitModels error")
-		return 
+		return
 	}
-	if err = InitSQL(); err != nil{
+	if err = InitSQL(); err != nil {
 		log.Fatal("Init SQL error")
 	}
 	// var word *wordDesc
@@ -44,7 +43,7 @@ func init(){
 	// 	log.Fatal(err)
 	// }
 	// showWord(word)
-	
+
 }
 func sum(s []int, c chan int) {
 	sum := 0
@@ -53,48 +52,81 @@ func sum(s []int, c chan int) {
 	}
 	c <- sum // send sum to c
 }
-func calculatePosition(appearanceIdx, totalAppearances int) int {
-    // 将复习分成几轮，确保间隔出现
-    // 例如：一个词出现3次，分别在第1轮、第3轮、第5轮出现
-    roundInterval := 6 / totalAppearances
-    return appearanceIdx*roundInterval + 1
-}
+// func testQuery()int{
+// 	query := `SELECT 
+// 		lr.word_id
+// 	FROM learning_record lr
+// 	JOIN vocabulary v ON lr.word_id = v.id
+// 	WHERE lr.user_id = ? AND lr.book_id = ? 
+// 		AND (lr.next_review_time <= NOW() OR lr.next_review_time IS NULL)
+// 	ORDER BY lr.familiarity ASC, lr.next_review_time ASC
+// 	LIMIT ?
+// 	`
+// 	rows, err := db.Query(query, "64a3a609-85d3-44ff-8f41-4efcd7a4a975", "a758ac1b-029a-44f8-a3e8-5e3646a2e6e5", 10)
+// 	if err != nil {
+
+// 	}
+// 	count := 0
+// 	for rows.Next(){
+// 		wordId := 0
+// 		if err := rows.Scan(&wordId); err != nil{
+// 			log.Fatal("scan error ", err.Error())
+// 		}
+// 		count += 1
+// 	}
+// 	return count
+
+// }
 func main() {
-	_, err := userLogin("byBit","1234567")
+	sid, err := userLogin("byBit", "1234567")
 	// user, err := insertUser("byBit","200533")
-	if err != nil{
+	if err != nil {
 		log.Fatal("insert user erro:", err)
 	}
-	t := []int{2,1,3,3,4,5,5,5,1,2,3,4,2,2,1,3}
-	for i, c := range t{
-		fmt.Print(calculatePosition(i, c),"  ")
+	// sid = sid
+	// row := db.QueryRow("select next_review_time from learning_record where id = 3")
+
+	fmt.Println(userSession)
+	fmt.Println(userNoteWords)
+	fmt.Println(userBookToId)
+	fmt.Println(wordsPool)
+	uid := userSession[sid]
+	review, err := StartReview(uid, userBookToId[uid+"_我的生词本"], 10)
+	if err != nil {
+		log.Fatal("startReview error ",err)
 	}
-	// s := []int{7, 2, 8, -9, 4, 0}
+	for thisTurn := review.GetNext() ; thisTurn != nil; thisTurn = review.GetNext(){
+		
+	}
+	
+}
+
+func timeTest() {
+		// createNoteBook(sid,"我的生词本")
+	// err = AddWordToNotebook(sid,"suspect","我的生词本")
+	// err = AddWordToNotebook(sid,"suppress","我的生词本")
+	// err = AddWordToNotebook(sid,"empathy","我的生词本")
+		// s := []int{7, 2, 8, -9, 4, 0}
 
 	// c := make(chan int)
 	// go sum(s[:len(s)/2], c)
 	// go sum(s[len(s)/2:], c)
 	// x, y := <-c, <-c // receive from c
 	// fmt.Println(x, y, x+y)
-	
 
-}
+	// now := time.Now()
 
-
-func timeTest(){
-		// now := time.Now()
-    
-    // fmt.Println("当前时间:", now)
-    // fmt.Println("年:", now.Year())
-    // fmt.Println("月:", now.Month())
-    // fmt.Println("日:", now.Day())
-    // fmt.Println("时:", now.Hour())
-    // fmt.Println("分:", now.Minute())
-    // fmt.Println("秒:", now.Second())
-    // fmt.Println("纳秒:", now.Nanosecond())
-    // fmt.Println("星期:", now.Weekday())
-    // fmt.Println("Unix时间戳:", now.Unix())
-    // fmt.Println("Unix毫秒:", now.UnixMilli())
+	// fmt.Println("当前时间:", now)
+	// fmt.Println("年:", now.Year())
+	// fmt.Println("月:", now.Month())
+	// fmt.Println("日:", now.Day())
+	// fmt.Println("时:", now.Hour())
+	// fmt.Println("分:", now.Minute())
+	// fmt.Println("秒:", now.Second())
+	// fmt.Println("纳秒:", now.Nanosecond())
+	// fmt.Println("星期:", now.Weekday())
+	// fmt.Println("Unix时间戳:", now.Unix())
+	// fmt.Println("Unix毫秒:", now.UnixMilli())
 	// fmt.Println(now.Format("2006-01-02"))           // 2024-01-15
 	// fmt.Println(now.Format("2006-01-02 15:04:05"))  // 2024-01-15 14:30:45
 	// fmt.Println(now.Format("2006/01/02"))           // 2024/01/15
@@ -125,31 +157,31 @@ func timeTest(){
 	// fmt.Println(updateQuery)
 }
 
-func esSearch(){
+func esSearch() {
 	query := map[string]interface{}{
-        "query": map[string]interface{}{
-            "match_all": map[string]interface{}{},
-        },
-    }
+		"query": map[string]interface{}{
+			"match_all": map[string]interface{}{},
+		},
+	}
 
 	var buf bytes.Buffer
-    if err := json.NewEncoder(&buf).Encode(query); err != nil {
-        log.Fatalf("Error encoding query: %s", err)
-    }
+	if err := json.NewEncoder(&buf).Encode(query); err != nil {
+		log.Fatalf("Error encoding query: %s", err)
+	}
 	res, err := EsClient.Search(
-        EsClient.Search.WithIndex("user"), // 索引名称
-        EsClient.Search.WithBody(&buf),        // 查询内容
+		EsClient.Search.WithIndex("user"), // 索引名称
+		EsClient.Search.WithBody(&buf),    // 查询内容
 		EsClient.Search.WithPretty(),
-    )
-    if err != nil {
-        log.Fatalf("Error getting response: %s", err)
-    }
-    defer res.Body.Close()
+	)
+	if err != nil {
+		log.Fatalf("Error getting response: %s", err)
+	}
+	defer res.Body.Close()
 	var result map[string]interface{}
-    if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
-        log.Fatalf("Error parsing response: %s", err)
-    }
+	if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
+		log.Fatalf("Error parsing response: %s", err)
+	}
 
-    // 打印结果
-    fmt.Println(result)
+	// 打印结果
+	fmt.Println(result)
 }

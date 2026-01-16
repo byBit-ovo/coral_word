@@ -5,7 +5,8 @@ import (
 	_"errors"
 	_"fmt"
 	"os"
-	"sort"
+	"strings"
+	_"sort"
 	_ "strconv"
 
 	// "time"
@@ -14,12 +15,19 @@ import (
 )
 
 
-var db *sql.DB
 func InitSQL() error {
 	var err error
 	mysql_url := os.Getenv("MYSQL_URL")
+	// 确保 DSN 包含 parseTime=true，以便自动解析时间字段
+	if mysql_url != "" && !strings.Contains(mysql_url, "parseTime") {
+		separator := "?"
+		if strings.Contains(mysql_url, "?") {
+			separator = "&"
+		}
+		mysql_url += separator + "parseTime=true&loc=Local"
+	}
 	db, err = sql.Open("mysql", mysql_url)
-	if err != nil{
+	if err != nil {
 		return err
 	}
 	return nil

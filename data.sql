@@ -44,3 +44,7 @@ INSERT INTO word_learning (
     NULL, NOW(),      -- last_review_time 为空或 NOW()（看你业务），next_review_time 默认 NOW() 代表立即可复习
     0, 0
 );
+
+
+
+SELECT lr.word_id, lr.familiarity, lr.consecutive_correct, lr.next_review_time FROM learning_record lr JOIN vocabulary v ON lr.word_id = v.id WHERE lr.user_id = '64a3a609-85d3-44ff-8f41-4efcd7a4a975' AND lr.book_id = 'a758ac1b-029a-44f8-a3e8-5e3646a2e6e5' AND lr.next_review_time <= NOW() ORDER BY lr.familiarity ASC, lr.next_review_time ASC LIMIT 10
