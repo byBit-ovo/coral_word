@@ -70,13 +70,13 @@ func sum(s []int, c chan int) {
 }
 
 func main() {
-	_, err := userLogin("byBit", "1234567")
-	if err != nil {
-		log.Fatal("insert user erro:", err)
-	}
+	// RyanQi, err := userLogin("byBit", "1234567")
+	// if err != nil {
+	// 	log.Fatal("insert user erro:", err)
+	// }
 	// RyanQi.reviewWords()
-	testWord([]string{"intellect"})
-	// testArticle([]string{"good","bake","farm","aide"})
+	testWord([]string{"contagious","conventional"})
+	// testArticle([]string{"I","love","you"})
 
 	
 }
