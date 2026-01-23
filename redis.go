@@ -29,11 +29,12 @@ func InitRedis() error{
 	return nil
 }
 
-
+// word: wordId
 func (client *RedisWordClient) HSet(word string, id int64) error {
 	return client.client.HSet(context.Background(), "coral_word", word, id).Err()
 }
 
+// word: wordId
 func (client *RedisWordClient) HGet(word string) (int64, error) {
 	res, err := client.client.HGet(context.Background(), "coral_word", word).Result()
 	if err != nil {
@@ -42,6 +43,7 @@ func (client *RedisWordClient) HGet(word string) (int64, error) {
 	return strconv.ParseInt(res, 10, 64)
 }
 
+// word: wordId
 func (client *RedisWordClient) HGetAll(word string) (map[string]string, error) {
 	return client.client.HGetAll(context.Background(), "coral_word").Result()
 }

@@ -35,7 +35,7 @@ func sync() error {
 		if err != nil {
 			return err
 		}
-		err = IndexWordDesc(word)
+		err = esClient.IndexWordDesc(word)
 		if err != nil {
 			return err
 		}

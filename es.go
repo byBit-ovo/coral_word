@@ -12,16 +12,20 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
 	"github.com/elastic/go-elasticsearch/v9"
 	"github.com/elastic/go-elasticsearch/v9/esapi"
 )
 
-var EsClient *elasticsearch.Client
+var esClient *EsClient
+
+type EsClient struct {
+	client *elasticsearch.Client
+}
 
 const wordDescIndex = "word_desc"
 
 func InitEs() error {
+	esClient = &EsClient{}
 	cfg := elasticsearch.Config{
 		Transport: &http.Transport{
 			MaxIdleConnsPerHost:   10,
@@ -33,11 +37,11 @@ func InitEs() error {
 		},
 	}
 	var err error
-	EsClient, err = elasticsearch.NewClient(cfg)
+	esClient.client, err = elasticsearch.NewClient(cfg)
 	if err != nil {
 		return err
 	}
-	res, err := EsClient.Info()
+	res, err := esClient.client.Info()
 	if err != nil {
 		return err
 	}
@@ -48,19 +52,19 @@ func InitEs() error {
 
 // index or update word desc
 // test over
-func IndexWordDesc(word *wordDesc) error {
-	if EsClient == nil {
+func (es *EsClient) IndexWordDesc(word *wordDesc) error {
+	if es.client == nil {
 		return errors.New("es client not initialized")
 	}
 	body, err := json.Marshal(word)
 	if err != nil {
 		return err
 	}
-	res, err := EsClient.Index(
+	res, err := es.client.Index(
 		wordDescIndex,
 		bytes.NewReader(body),
-		EsClient.Index.WithDocumentID(strconv.FormatInt(word.WordID, 10)),
-		EsClient.Index.WithRefresh("true"),
+		es.client.Index.WithDocumentID(strconv.FormatInt(word.WordID, 10)),
+		es.client.Index.WithRefresh("true"),
 	)
 	if err != nil {
 		return err
@@ -73,9 +77,9 @@ func IndexWordDesc(word *wordDesc) error {
 }
 
 // update synonyms for example, set only synonyms
-// todo test over
-func UpdateWordDesc(word *wordDesc) error {
-	if EsClient == nil {
+// test over
+func (es *EsClient) UpdateWordDesc(word *wordDesc) error {
+	if es.client == nil {
 		return errors.New("es client not initialized")
 	}
 	doc := map[string]interface{}{
@@ -85,11 +89,11 @@ func UpdateWordDesc(word *wordDesc) error {
 	if err != nil {
 		return err
 	}
-	res, err := EsClient.Update(
+	res, err := es.client.Update(
 		wordDescIndex,
 		strconv.FormatInt(word.WordID, 10),
 		bytes.NewReader(body),
-		EsClient.Update.WithRefresh("true"),
+		es.client.Update.WithRefresh("true"),
 	)
 	if err != nil {
 		return err
@@ -101,15 +105,62 @@ func UpdateWordDesc(word *wordDesc) error {
 	return nil
 }
 
-func DeleteWordDesc(wordID int64) error {
-	if EsClient == nil {
+// test over
+func (es *EsClient) DeleteWordById(wordID int64) error {
+	if es.client == nil {
 		return errors.New("es client not initialized")
 	}
-	res, err := EsClient.Delete(
+	res, err := es.client.Delete(
 		wordDescIndex,
 		strconv.FormatInt(wordID, 10),
-		EsClient.Delete.WithRefresh("true"),
+		es.client.Delete.WithRefresh("true"),
 	)
+	if res.StatusCode==404{
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	
+	if res.IsError() {
+		return parseEsError(res)
+	}
+	return nil
+}
+
+// 按 word 精确删除（使用 word.keyword）
+func (es *EsClient) DeleteWordByName(word string) error {
+	if es.client == nil {
+		return errors.New("es client not initialized")
+	}
+	word = strings.TrimSpace(word)
+	if word == "" {
+		return errors.New("empty word")
+	}
+
+	query := map[string]interface{}{
+		"query": map[string]interface{}{
+			"term": map[string]interface{}{
+				"word.keyword": word,
+			},
+		},
+	}
+
+	body, err := json.Marshal(query)
+	if err != nil {
+		return err
+	}
+
+	res, err := es.client.DeleteByQuery(
+		[]string{wordDescIndex},
+		bytes.NewReader(body),
+		es.client.DeleteByQuery.WithRefresh(true),
+	)
+	//如果删除的目标不存在，则直接忽略
+	if res.StatusCode==404{
+		return nil
+	}
 	if err != nil {
 		return err
 	}
@@ -120,29 +171,28 @@ func DeleteWordDesc(wordID int64) error {
 	return nil
 }
 
-func SearchWordDescByWord(word string, size int) ([]wordDesc, error) {
-	if EsClient == nil {
+// test over
+func (es *EsClient) SearchWordDescByWord(word string) ([]wordDesc, error) {
+	if es.client == nil {
 		return nil, errors.New("es client not initialized")
 	}
-	if size <= 0 {
-		size = 10
-	}
+
 	query := map[string]interface{}{
 		"query": map[string]interface{}{
 			"match": map[string]interface{}{
 				"word": word,
 			},
 		},
-		"size": size,
+		"size": 10,
 	}
 	body, err := json.Marshal(query)
 	if err != nil {
 		return nil, err
 	}
-	res, err := EsClient.Search(
-		EsClient.Search.WithIndex(wordDescIndex),
-		EsClient.Search.WithBody(bytes.NewReader(body)),
-		EsClient.Search.WithTrackTotalHits(true),
+	res, err := es.client.Search(
+		es.client.Search.WithIndex(wordDescIndex),
+		es.client.Search.WithBody(bytes.NewReader(body)),
+		es.client.Search.WithTrackTotalHits(true),
 	)
 	if err != nil {
 		return nil, err
@@ -168,8 +218,12 @@ func SearchWordDescByWord(word string, size int) ([]wordDesc, error) {
 	return results, nil
 }
 
-func SearchWordDescFuzzy(word string, size int) ([]wordDesc, error) {
-	if EsClient == nil {
+// 以这个接口为base,设计其他搜索接口
+// 1. 拼写错误
+// 2. 前缀搜索
+// 3. 汉语意思搜索
+func (es *EsClient) SearchWordDescFuzzy(word string, size int) ([]wordDesc, error) {
+	if es.client == nil {
 		return nil, errors.New("es client not initialized")
 	}
 	word = strings.TrimSpace(word)
@@ -196,10 +250,10 @@ func SearchWordDescFuzzy(word string, size int) ([]wordDesc, error) {
 	if err != nil {
 		return nil, err
 	}
-	res, err := EsClient.Search(
-		EsClient.Search.WithIndex(wordDescIndex),
-		EsClient.Search.WithBody(bytes.NewReader(body)),
-		EsClient.Search.WithTrackTotalHits(true),
+	res, err := es.client.Search(
+		es.client.Search.WithIndex(wordDescIndex),
+		es.client.Search.WithBody(bytes.NewReader(body)),
+		es.client.Search.WithTrackTotalHits(true),
 	)
 	if err != nil {
 		return nil, err
@@ -226,8 +280,8 @@ func SearchWordDescFuzzy(word string, size int) ([]wordDesc, error) {
 }
 
 //第一次 search 拿到 scroll_id + 第一批数据，之后用 scroll_id 一批批拉完所有文档，只提取 _id。
-func SearchAllWordIDs(batchSize int) ([]int64, error) {
-	if EsClient == nil {
+func (es *EsClient) SearchAllWordIDs(batchSize int) ([]int64, error) {
+	if es.client == nil {
 		return nil, errors.New("es client not initialized")
 	}
 	if batchSize <= 0 {
@@ -249,10 +303,10 @@ func SearchAllWordIDs(batchSize int) ([]int64, error) {
 	if err != nil {
 		return nil, err
 	}
-	res, err := EsClient.Search(
-		EsClient.Search.WithIndex(wordDescIndex),
-		EsClient.Search.WithBody(bytes.NewReader(body)),
-		EsClient.Search.WithScroll(time.Minute),
+	res, err := es.client.Search(
+		es.client.Search.WithIndex(wordDescIndex),
+		es.client.Search.WithBody(bytes.NewReader(body)),
+		es.client.Search.WithScroll(time.Minute),
 	)
 	if err != nil {
 		return nil, err
@@ -277,8 +331,8 @@ func SearchAllWordIDs(batchSize int) ([]int64, error) {
 		if scrollID == "" {
 			return
 		}
-		_, _ = EsClient.ClearScroll(
-			EsClient.ClearScroll.WithScrollID(scrollID),
+		_, _ = es.client.ClearScroll(
+			es.client.ClearScroll.WithScrollID(scrollID),
 		)
 	}()
 	ids := make([]int64, 0, len(resp.Hits.Hits))
@@ -298,9 +352,9 @@ func SearchAllWordIDs(batchSize int) ([]int64, error) {
 		return nil, err
 	}
 	for len(resp.Hits.Hits) > 0 {
-		res, err = EsClient.Scroll(
-			EsClient.Scroll.WithScrollID(scrollID),
-			EsClient.Scroll.WithScroll(time.Minute),
+			res, err = es.client.Scroll(
+			es.client.Scroll.WithScrollID(scrollID),
+			es.client.Scroll.WithScroll(time.Minute),
 		)
 		if err != nil {
 			return nil, err

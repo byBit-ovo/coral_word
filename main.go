@@ -30,11 +30,12 @@ func init() {
 	if err = InitSQL(); err != nil {
 		log.Fatal("Init SQL error")
 	}
-	if err = InitEs(); err != nil {
-		log.Fatal("Init Es error")
-	}
+	
 	if err = InitRedis(); err != nil {
 		log.Fatal("Init Redis error")
+	}
+	if err = InitEs(); err != nil {
+		log.Fatal("Init Es error")
 	}
 
 }
@@ -75,21 +76,11 @@ func main() {
 	if err != nil {
 		log.Fatal("userLogin error:", err)
 	}
-
-	// wordIds, err := SearchAllWordIDs(500)
-	// if err != nil {
-	// 	log.Fatal("SearchAllWordIDs error:", err)
-	// }
-	// fmt.Println(wordIds)
-	err = sync()
-	// if err != nil {
-	// 	log.Fatal("sync error:", err)
-	// }
-	// err = scaleUpWords(10)
-	// if err != nil {
-	// 	log.Fatal("scaleUpWords error:", err)
-	// }
-	// if err := checkSync(); err != nil{
-	// 	log.Fatal(err)
-	// }
+	words, err := esClient.SearchWordDescFuzzy("希望", 10)	
+	if err != nil {
+		log.Fatal("FuzzySearch error:", err)
+	}
+	for _, w := range words {
+		w.show()
+	}
 }

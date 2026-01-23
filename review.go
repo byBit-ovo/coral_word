@@ -139,7 +139,7 @@ func updateFamiAndNextReview(s *LearningStat, isCorrect bool) {
 		if s.Familiarity > 0 {
 			s.Familiarity -= 2 // 答错扣分狠一点
 			if s.Familiarity < 0 {
-				s.Familiarity = 0
+				s.Familiarity = 	0
 			}
 		}
 	}
