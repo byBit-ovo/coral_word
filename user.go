@@ -237,6 +237,15 @@ func selectUser(name string) (*User, error) {
 	return user, nil
 }
 
+func selectUserByID(uid string) (*User, error) {
+	row := db.QueryRow("select id, name, pswd from user where id=?", uid)
+	user := &User{}
+	if err := row.Scan(&(user.Id), &(user.Name), &(user.Pswd)); err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
 func insertUser(name, pswd string) (*User, error) {
 	tryUser, err := selectUser(name)
 	if err != nil && err != sql.ErrNoRows {

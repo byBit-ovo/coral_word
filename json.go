@@ -2,7 +2,7 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
+	_"fmt"
 	"errors"
 	"github.com/byBit-ovo/coral_word/llm"
 	_ "github.com/ydb-platform/ydb-go-sdk/v3/log"
@@ -10,12 +10,12 @@ import (
 
 
 func GetWordDesc(word string) (*wordDesc, error){
-	choseModel := llm.ARK
+	choseModel := llm.DEEP_SEEK
 	json_rsp, err := llm.Models[choseModel].GetWordDefWithJson(word)
 	if err != nil{
 		return nil, err
 	}
-	fmt.Println(json_rsp)
+	// fmt.Println(json_rsp)
 	word_desc := &wordDesc{}
 	word_desc.Source = choseModel
 	err = json.Unmarshal([]byte(json_rsp), word_desc)

@@ -124,10 +124,8 @@ func (s *ReviewSession) SubmitAnswer(item *ReviewItem, isCorrect bool) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// 算法逻辑 (SM-2 简化)
-// ---------------------------------------------------------------------------
 
+// 算法逻辑 (SM-2 简化)
 func updateFamiAndNextReview(s *LearningStat, isCorrect bool) {
 	if isCorrect {
 		s.ConsecutiveCorrect++
@@ -192,10 +190,8 @@ func generateQueue(stats []*ReviewItem) []*ReviewItem {
 	return queue
 }
 
-// ---------------------------------------------------------------------------
-// DB 操作简化
-// ---------------------------------------------------------------------------
 
+// DB 操作简化
 func fetchReviewStats(uid, bookID string, limit int) ([]*ReviewItem, error) {
 	// JOIN 查询：一次性拿出 复习进度 + 单词基本信息
 	// 优先复习到期的(next <= now)，其次是新词(next_review_time IS NULL 或 total_reviews=0)

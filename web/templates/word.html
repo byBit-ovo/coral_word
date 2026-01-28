@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Word</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="container">
+    {{ if .error }}
+      <div class="card">
+        <h2>Error</h2>
+        <p>{{ .error }}</p>
+      </div>
+    {{ else }}
+      <h1>{{ .word.Word }}</h1>
+      <p class="muted">{{ .word.Pronunciation }}</p>
+
+      <div class="card">
+        <h3>Definitions</h3>
+        <ul class="list">
+          {{ range .word.Definitions }}
+            <li><strong>{{ .Pos }}</strong> - {{ range .Meanings }}{{ . }} {{ end }}</li>
+          {{ end }}
+        </ul>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <h3>Synonyms</h3>
+          <p>{{ range .word.Synonyms }}<span class="tag">{{ . }}</span>{{ end }}</p>
+        </div>
+        <div class="card">
+          <h3>Derivatives</h3>
+          <p>{{ range .word.Derivatives }}<span class="tag">{{ . }}</span>{{ end }}</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Example</h3>
+        <p>{{ .word.Example }}</p>
+        <p class="muted">{{ .word.Example_cn }}</p>
+      </div>
+
+      <div class="card">
+        <h3>Phrases</h3>
+        <ul class="list">
+          {{ range .word.Phrases }}
+            <li>{{ .Example }} <span class="muted">- {{ .Example_cn }}</span></li>
+          {{ end }}
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>Tags</h3>
+        <p>{{ range .word.Exam_tags }}<span class="tag">{{ . }}</span>{{ end }}</p>
+      </div>
+    {{ end }}
+    <a class="footer-link" href="/">Back</a>
+  </div>
+</body>
+</html>

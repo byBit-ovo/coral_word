@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package coral_word;
+
+option go_package = "github.com/byBit-ovo/coral_word/pb;pb";
+
+message WordRequest {
+  string word = 1;
+}
+
+message Definition {
+  string pos = 1;
+  repeated string meaning = 2;
+}
+
+message Phrase {
+  string example = 1;
+  string example_cn = 2;
+}
+
+message WordDesc {
+  string err = 1;
+  string word = 2;
+  string pronunciation = 3;
+  repeated Definition definitions = 4;
+  repeated string derivatives = 5;
+  repeated string exam_tags = 6;
+  string example = 7;
+  string example_cn = 8;
+  repeated Phrase phrases = 9;
+  repeated string synonyms = 10;
+  int32 source = 11;
+  int64 word_id = 12;
+}
+
+service CoralWordService {
+  rpc QueryWord(WordRequest) returns (WordDesc);
+}
