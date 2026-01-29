@@ -2,18 +2,17 @@ package main
 
 import (
 	"database/sql"
-	_"errors"
-	_"fmt"
+	_ "errors"
+	"fmt"
 	"os"
-	"strings"
-	_"sort"
+	_ "sort"
 	_ "strconv"
+	"strings"
 
 	// "time"
 	_ "github.com/go-sql-driver/mysql"
-	_"github.com/google/uuid"
+	_ "github.com/google/uuid"
 )
-
 
 func InitSQL() error {
 	var err error
@@ -33,220 +32,285 @@ func InitSQL() error {
 	return nil
 }
 func minDistance(word1 string, word2 string) int {
-    cache := make([][]int, len(word1)+1)
-    for i,_ := range cache{
-        cache[i] = make([]int, len(word2)+1)
-        for j,_ := range cache[i]{
-            cache[i][j] = -1
-        }
-    }
-    var dfs func(int,int)int
-    dfs = func(i int, j int) int{
-        if i == len(word1){
-            cache[i][j] = len(word2) - j
-            return len(word2)-j
-        }
-        if j == len(word2){
-            cache[i][j] = len(word1) - i
-            return len(word1) - i
-        }
-        if cache[i][j] != -1{
-            return cache[i][j]
-        }
-        if word1[i] == word2[j]{
-            cache[i][j] = dfs(i+1,j+1)
-            return cache[i][j]
-        }
+	cache := make([][]int, len(word1)+1)
+	for i, _ := range cache {
+		cache[i] = make([]int, len(word2)+1)
+		for j, _ := range cache[i] {
+			cache[i][j] = -1
+		}
+	}
+	var dfs func(int, int) int
+	dfs = func(i int, j int) int {
+		if i == len(word1) {
+			cache[i][j] = len(word2) - j
+			return len(word2) - j
+		}
+		if j == len(word2) {
+			cache[i][j] = len(word1) - i
+			return len(word1) - i
+		}
+		if cache[i][j] != -1 {
+			return cache[i][j]
+		}
+		if word1[i] == word2[j] {
+			cache[i][j] = dfs(i+1, j+1)
+			return cache[i][j]
+		}
 
-        cache[i][j] = min(
-            // add
-            1 + dfs(i,j+1),
-            // delete
-            1 + dfs(i+1,j),
-            // replace
-            1 + dfs(i+1, j+1),
-        )
-        return cache[i][j]
-    }
-    return dfs(0,0)
+		cache[i][j] = min(
+			// add
+			1+dfs(i, j+1),
+			// delete
+			1+dfs(i+1, j),
+			// replace
+			1+dfs(i+1, j+1),
+		)
+		return cache[i][j]
+	}
+	return dfs(0, 0)
 }
 
-// 
-func selectWordById(wordID int64)(w *wordDesc, err error){
-    w = &wordDesc{}
-    var tag int64
-    tx, err := db.Begin()
-    if err != nil {
-        return nil, err
-    }
-    defer func() { 
-		if err != nil{
-			_ = tx.Rollback() 
+func selectWordsByIds(wordIds ...int64) (map[int64]*wordDesc, error) {
+	if len(wordIds) == 0 {
+		return map[int64]*wordDesc{}, nil
+	}
+	placeholders := strings.Repeat("?,", len(wordIds)-1) + "?"
+	args := make([]interface{}, len(wordIds))
+	for i, id := range wordIds {
+		args[i] = id
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
 		}
 	}()
 
-    // 查询主表
-	source := 0
-    row := tx.QueryRow("SELECT word, pronunciation, tag, source FROM vocabulary WHERE id = ?", wordID)
-    if err = row.Scan(&w.Word, &w.Pronunciation, &tag,&source); err != nil {
-        return nil, err
-    }
-	if err = aggWord(w,tx,wordID,tag);err != nil{
+	rows, err := tx.Query(fmt.Sprintf("SELECT id, word, pronunciation, tag, source FROM vocabulary WHERE id IN (%s)", placeholders), args...)
+	if err != nil {
 		return nil, err
 	}
-	w.WordID = wordID
+	defer rows.Close()
+
+	wordsByID := make(map[int64]*wordDesc)
+	for rows.Next() {
+		w := &wordDesc{}
+		var tag int64
+		if err := rows.Scan(&w.WordID, &w.Word, &w.Pronunciation, &tag, &w.Source); err != nil {
+			return nil, err
+		}
+		wordsByID[w.WordID] = w
+		w.Exam_tags = TagsFromMask(tag)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if err = aggWords(tx, wordsByID); err != nil {
+		return nil, err
+	}
 	if err = tx.Commit(); err != nil {
-        return nil,err
-    }
-	return w, nil
+		return nil, err
+	}
+	return wordsByID, nil
 }
 
-func selectWordByName(word string) (w *wordDesc, err error) {
-    w = &wordDesc{}
-    var tag int64
-    tx, err := db.Begin()
-    if err != nil {
-        return nil, err
-    }
-    defer func() { 
-		if err != nil{
-			_ = tx.Rollback() 
+func selectWordsByNames(words ...string) (map[string]*wordDesc, error) {
+	if len(words) == 0 {
+		return map[string]*wordDesc{}, nil
+	}
+	placeholders := strings.Repeat("?,", len(words)-1) + "?"
+	args := make([]interface{}, len(words))
+	for i, word := range words {
+		args[i] = word
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
 		}
 	}()
-	source := 0
-    // 查询主表
-    row := tx.QueryRow("SELECT id, word, pronunciation, tag, source FROM vocabulary WHERE word = ?", word)
-    if err = row.Scan(&w.WordID, &w.Word, &w.Pronunciation, &tag, &source); err != nil {
-        return nil, err
-    }
-	if err = aggWord(w,tx,w.WordID,tag);err != nil{
+
+	rows, err := tx.Query(fmt.Sprintf("SELECT id, word, pronunciation, tag, source FROM vocabulary WHERE word IN (%s)", placeholders), args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	wordsByName := make(map[string]*wordDesc)
+	for rows.Next() {
+		w := &wordDesc{}
+		var tag int64
+		if err := rows.Scan(&w.WordID, &w.Word, &w.Pronunciation, &tag, &w.Source); err != nil {
+			return nil, err
+		}
+		wordsByName[w.Word] = w
+        w.Exam_tags = TagsFromMask(tag)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	wordsByID := make(map[int64]*wordDesc, len(wordsByName))
+	for _, w := range wordsByName {
+		wordsByID[w.WordID] = w
+	}
+
+	if err = aggWords(tx, wordsByID); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
-        return nil,err
-    }
-	return w, nil
-
+		return nil, err
+	}
+	return wordsByName, nil
 }
-func aggWord(wordDesc *wordDesc, tx *sql.Tx, wordID int64, tag int64 )error{
-	// updateQuery := fmt.Sprintf("update vocabulary set hit_count=hit_count+1 where word_id = '%d' ", wordID)
-	// _, err := tx.Exec(updateQuery)
-	_, err := tx.Exec("UPDATE vocabulary SET hit_count = hit_count + 1 WHERE id = ?", wordID)
-	if err != nil{
+
+
+func aggWords(tx *sql.Tx, wordsByID map[int64]*wordDesc) error {
+	if len(wordsByID) == 0 {
+		return nil
+	}
+	placeholders := strings.Repeat("?,", len(wordsByID)-1) + "?"
+	args := make([]interface{}, len(wordsByID))
+	for i, w := range wordsByID {
+		args[i] = w.WordID
+    }
+	if _, err := tx.Exec("UPDATE vocabulary SET hit_count = hit_count + 1 WHERE id IN ("+placeholders+")", args...); err != nil {
 		return err
 	}
-    wordDesc.Exam_tags = TagsFromMask(tag)
 
-    // 查询 definitions
-    definitions, err := queryDefinitions(tx, wordID)
-    if err != nil {
-        return err
-    }
-    wordDesc.Definitions = definitions
+	defRows, err := tx.Query("SELECT word_id, pos, translation FROM vocabulary_cn WHERE word_id IN ("+placeholders+")", args...)
+	if err != nil {
+		return err
+	}
+	defMap := make(map[int64]map[string][]string)
+	for defRows.Next() {
+		var id int64
+		var pos, translation string
+		if err := defRows.Scan(&id, &pos, &translation); err != nil {
+			defRows.Close()
+			return err
+		}
+		if defMap[id] == nil {
+			defMap[id] = make(map[string][]string)
+		}
+		defMap[id][pos] = append(defMap[id][pos], translation)
+	}
+	if err := defRows.Err(); err != nil {
+		defRows.Close()
+		return err
+	}
+	defRows.Close()
 
-    // 查询 synonyms
-    synonyms, err := queryStrings(tx, "SELECT syn FROM synonyms WHERE word_id = ?", wordID)
-    if err != nil {
-        return err
-    }
-    wordDesc.Synonyms = synonyms
+	synRows, err := tx.Query("SELECT word_id, syn FROM synonyms WHERE word_id IN ("+placeholders+")", args...)
+	if err != nil {
+		return err
+	}
+	synMap := make(map[int64][]string)
+	for synRows.Next() {
+		var id int64
+		var syn string
+		if err := synRows.Scan(&id, &syn); err != nil {
+			synRows.Close()
+			return err
+		}
+		synMap[id] = append(synMap[id], syn)
+	}
+	if err := synRows.Err(); err != nil {
+		synRows.Close()
+		return err
+	}
+	synRows.Close()
 
-    // 查询 derivatives
-    derivatives, err := queryStrings(tx, "SELECT der FROM derivatives WHERE word_id = ?", wordID)
-    if err != nil {
-        return err
-    }
-    wordDesc.Derivatives = derivatives
+	derRows, err := tx.Query("SELECT word_id, der FROM derivatives WHERE word_id IN ("+placeholders+")", args...)
+	if err != nil {
+		return err
+	}
+	derMap := make(map[int64][]string)
+	for derRows.Next() {
+		var id int64
+		var der string
+		if err := derRows.Scan(&id, &der); err != nil {
+			derRows.Close()
+			return err
+		}
+		derMap[id] = append(derMap[id], der)
+	}
+	if err := derRows.Err(); err != nil {
+		derRows.Close()
+		return err
+	}
+	derRows.Close()
 
-    // 查询 example
-    row := tx.QueryRow("SELECT sentence, translation FROM example WHERE word_id = ?", wordID)
-    if err := row.Scan(&wordDesc.Example, &wordDesc.Example_cn); err != nil && err != sql.ErrNoRows {
-        return err
-    }
+	exRows, err := tx.Query("SELECT word_id, sentence, translation FROM example WHERE word_id IN ("+placeholders+")", args...)
+	if err != nil {
+		return err
+	}
+	type examplePair struct {
+		example   string
+		exampleCn string
+	}
+	exMap := make(map[int64]examplePair)
+	for exRows.Next() {
+		var id int64
+		var sentence, translation string
+		if err := exRows.Scan(&id, &sentence, &translation); err != nil {
+			exRows.Close()
+			return err
+		}
+		exMap[id] = examplePair{example: sentence, exampleCn: translation}
+	}
+	if err := exRows.Err(); err != nil {
+		exRows.Close()
+		return err
+	}
+	exRows.Close()
 
-    // 查询 phrases
-    phrases, err := queryPhrases(tx, wordID)
-    if err != nil {
-        return err
-    }
-    wordDesc.Phrases = phrases
-    return nil
+	phraseRows, err := tx.Query("SELECT word_id, phrase, translation FROM phrases WHERE word_id IN ("+placeholders+")", args...)
+	if err != nil {
+		return err
+	}
+	phraseMap := make(map[int64][]Phrase)
+	for phraseRows.Next() {
+		var id int64
+		var phrase, translation string
+		if err := phraseRows.Scan(&id, &phrase, &translation); err != nil {
+			phraseRows.Close()
+			return err
+		}
+		phraseMap[id] = append(phraseMap[id], Phrase{Example: phrase, Example_cn: translation})
+	}
+	if err := phraseRows.Err(); err != nil {
+		phraseRows.Close()
+		return err
+	}
+	phraseRows.Close()
+
+	for id, w := range wordsByID {
+		defPosMap := defMap[id]
+		if len(defPosMap) > 0 {
+			defs := make([]Definition, 0, len(defPosMap))
+			for pos, translations := range defPosMap {
+				defs = append(defs, Definition{Pos: pos, Meanings: translations})
+			}
+			w.Definitions = defs
+		}
+		w.Synonyms = synMap[id]
+		w.Derivatives = derMap[id]
+		if ex, ok := exMap[id]; ok {
+			w.Example = ex.example
+			w.Example_cn = ex.exampleCn
+		}
+		w.Phrases = phraseMap[id]
+	}
+	return nil
 }
-// 查询 definitions
-func queryDefinitions(tx *sql.Tx, wordID int64) ([]Definition, error) {
-    rows, err := tx.Query("SELECT pos, translation FROM vocabulary_cn WHERE word_id = ?", wordID)
-    if err != nil {
-        return nil, err
-    }
-    defer rows.Close()
-
-    definitionsMap := make(map[string][]string)
-    for rows.Next() {
-        var pos, translation string
-        if err := rows.Scan(&pos, &translation); err != nil {
-            return nil, err
-        }
-        definitionsMap[pos] = append(definitionsMap[pos], translation)
-    }
-    if err := rows.Err(); err != nil {
-        return nil, err
-    }
-
-    var definitions []Definition
-    for pos, translations := range definitionsMap {
-        definitions = append(definitions, Definition{Pos: pos, Meanings: translations})
-    }
-    return definitions, nil
-}
-
-// 查询字符串列表（如 synonyms, derivatives）
-func queryStrings(tx *sql.Tx, query string, args ...interface{}) ([]string, error) {
-    rows, err := tx.Query(query, args...)
-    if err != nil {
-        return nil, err
-    }
-    defer rows.Close()
-
-    var results []string
-    for rows.Next() {
-        var value string
-        if err := rows.Scan(&value); err != nil {
-            return nil, err
-        }
-        results = append(results, value)
-    }
-    if err := rows.Err(); err != nil {
-        return nil, err
-    }
-    return results, nil
-}
-
-// 查询 phrases
-func queryPhrases(tx *sql.Tx, wordID int64) ([]Phrase, error) {
-    rows, err := tx.Query("SELECT phrase, translation FROM phrases WHERE word_id = ?", wordID)
-    if err != nil {
-        return nil, err
-    }
-    defer rows.Close()
-
-    var phrases []Phrase
-    for rows.Next() {
-        var phrase, translation string
-        if err := rows.Scan(&phrase, &translation); err != nil {
-            return nil, err
-        }
-        phrases = append(phrases, Phrase{Example: phrase, Example_cn: translation})
-    }
-    if err := rows.Err(); err != nil {
-        return nil, err
-    }
-    return phrases, nil
-}
-
-
-
-
-
 
 // func selectWord(word string)(*wordDesc, error){
 // 	var word_id int32

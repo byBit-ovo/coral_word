@@ -4,11 +4,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"math/rand"
 	"sort"
 	"time"
-	"log"
 )
 
 // LearningStat 对应 DB 记录，包含算法所需核心数据
@@ -34,7 +34,7 @@ const (
 // ReviewSession 会话状态
 type ReviewSession struct {
 	Status      int
-	UserId    	string
+	UserId      string
 	BookID      string
 	BookName    string
 	ReviewQueue []*ReviewItem
@@ -45,40 +45,40 @@ type ReviewSession struct {
 // StartReview：开始复习
 // userNoteWords[uid][book_name] = []word_id
 
-func StartReview(sid string)map[string]bool{
+func StartReview(sid string) map[string]bool {
 	uid := userSession[sid]
 	review, err := GetReview(uid, userBookToId[uid+"_我的生词本"], 10)
 	if err != nil {
 		log.Fatal(err)
 	}
-	for thisTurn := review.GetNext() ; thisTurn != nil; thisTurn = review.GetNext(){
+	for thisTurn := review.GetNext(); thisTurn != nil; thisTurn = review.GetNext() {
 		fmt.Println(thisTurn.WordDesc.Word)
 		fmt.Println("0.认识 1.不认识 2.猜一猜")
 		choose := 0
 		_, err := fmt.Scan(&choose)
-		for err != nil{
+		for err != nil {
 			fmt.Println("输入错误，请重试")
 			_, err = fmt.Scan(&choose)
 		}
-		switch choose{
-			case 0:
-				review.SubmitAnswer(thisTurn, true)
-				thisTurn.WordDesc.show()
-			case 1:
-				review.SubmitAnswer(thisTurn, false)
-				thisTurn.WordDesc.show()
-			case 2:
-				thisTurn.WordDesc.showExample()
-				fmt.Scan(&choose)
-				thisTurn.WordDesc.show()
+		switch choose {
+		case 0:
+			review.SubmitAnswer(thisTurn, true)
+			thisTurn.WordDesc.show()
+		case 1:
+			review.SubmitAnswer(thisTurn, false)
+			thisTurn.WordDesc.show()
+		case 2:
+			thisTurn.WordDesc.showExample()
+			fmt.Scan(&choose)
+			thisTurn.WordDesc.show()
 		}
 	}
 	err = review.saveProgress()
-	if err != nil{
+	if err != nil {
 		fmt.Println(err)
 	}
 	words := map[string]bool{}
-	for _,item := range review.ReviewQueue{
+	for _, item := range review.ReviewQueue {
 		words[item.WordDesc.Word] = true
 	}
 	return words
@@ -97,7 +97,7 @@ func GetReview(uid, bookID string, limit int) (*ReviewSession, error) {
 	queue := generateQueue(stats)
 
 	return &ReviewSession{
-		UserId:   uid, 
+		UserId:      uid,
 		BookID:      bookID,
 		ReviewQueue: queue,
 		CurrentIdx:  0,
@@ -124,7 +124,6 @@ func (s *ReviewSession) SubmitAnswer(item *ReviewItem, isCorrect bool) {
 	}
 }
 
-
 // 算法逻辑 (SM-2 简化)
 func updateFamiAndNextReview(s *LearningStat, isCorrect bool) {
 	if isCorrect {
@@ -137,7 +136,7 @@ func updateFamiAndNextReview(s *LearningStat, isCorrect bool) {
 		if s.Familiarity > 0 {
 			s.Familiarity -= 2 // 答错扣分狠一点
 			if s.Familiarity < 0 {
-				s.Familiarity = 	0
+				s.Familiarity = 0
 			}
 		}
 	}
@@ -190,7 +189,6 @@ func generateQueue(stats []*ReviewItem) []*ReviewItem {
 	return queue
 }
 
-
 // DB 操作简化
 func fetchReviewStats(uid, bookID string, limit int) ([]*ReviewItem, error) {
 	// JOIN 查询：一次性拿出 复习进度 + 单词基本信息
@@ -213,29 +211,35 @@ func fetchReviewStats(uid, bookID string, limit int) ([]*ReviewItem, error) {
 	defer rows.Close()
 
 	var list []*ReviewItem
+	var wordIDs []int64
 	for rows.Next() {
 		s := &LearningStat{}
-
-		// 注意 Scan 顺序
-		// 如果 DSN 中包含 parseTime=true，可以直接扫描到 time.Time
-		// 否则需要先扫描到 string 再解析
 		var nextReviewTime sql.NullTime // 使用 NullTime 处理可能的 NULL 值
 
 		if err := rows.Scan(&s.WordID, &s.Familiarity, &s.ConsecutiveCorrect, &nextReviewTime); err != nil {
 			return nil, err
 		}
-
-		// 处理 NULL 值：如果为 NULL，设置为零值或当前时间
 		if nextReviewTime.Valid {
 			s.NextReviewTime = nextReviewTime.Time
 		} else {
 			s.NextReviewTime = time.Time{} // 零值，表示未设置
 		}
-
+		wordIDs = append(wordIDs, s.WordID)
 		list = append(list, &ReviewItem{
 			Stat:     s,
-			WordDesc: wordsPool[s.WordID],
+			WordDesc: nil,
 		})
+	}
+	wordMap, err := selectWordsByIds(wordIDs...)
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range list {
+		wordDesc, ok := wordMap[item.Stat.WordID]
+		if !ok {
+			return nil, fmt.Errorf("word not found for id: %d", item.Stat.WordID)
+		}
+		item.WordDesc = wordDesc
 	}
 	return list, nil
 }

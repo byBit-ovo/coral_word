@@ -38,7 +38,7 @@ func clearFile(path string) error {
 	if err != nil {
 		return err
 	}
-	
+
 	return file.Close()
 }
 
@@ -50,6 +50,7 @@ func syncMissingInEs(path string) error {
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
+	var ids []int64
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
@@ -60,16 +61,29 @@ func syncMissingInEs(path string) error {
 			log.Println("parse missInEs line error:", err)
 			continue
 		}
-		wordDesc, err := selectWordById(id)
-		if err != nil {
-			log.Println("selectWordById error:", err)
+		ids = append(ids, id)
+	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	wordMap, err := selectWordsByIds(ids...)
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		wordDesc, ok := wordMap[id]
+		if !ok {
+			log.Println("selectWordsByIds missing id:", id)
 			continue
 		}
 		if err := esClient.IndexWordDesc(wordDesc); err != nil {
 			return err
 		}
 	}
-	return scanner.Err()
+	return nil
 }
 
 func syncMissingInRedis(path string) error {
@@ -94,7 +108,7 @@ func syncMissingInRedis(path string) error {
 			log.Println("missInRedis word empty for id:", id)
 			continue
 		}
-		if err := redisWordClient.HSet(word, id); err != nil {
+		if err := redisWordClient.HSetWord(word, id); err != nil {
 			return err
 		}
 	}
@@ -119,7 +133,7 @@ func parseMissingLogLine(line string) (int64, string, error) {
 }
 
 // scale up words source pool
-func scaleUpWords(count int) error{
+func scaleUpWords(count int) error {
 	// currentCount, err := redisWordClient.HLen()
 	// if err != nil {
 	// 	return err
@@ -131,16 +145,16 @@ func scaleUpWords(count int) error{
 	}
 	defer file.Close()
 	scanner := bufio.NewScanner(file)
-	for scanner.Scan() && currentCount != 0{
+	for scanner.Scan() && currentCount != 0 {
 		currentCount -= 1
 	}
 	for scanner.Scan() && count > 0 {
 		word := scanner.Text()
-		word_desc, err :=QueryWord(word)
-		if err != nil{
+		word_desc, err := QueryWord(word)
+		if err != nil {
 			return err
 		}
-		err = redisWordClient.HSet(word, word_desc.WordID)
+		err = redisWordClient.HSetWord(word, word_desc.WordID)
 		if err != nil {
 			return err
 		}
@@ -158,9 +172,9 @@ func checkSyncLog() {
 	defer file.Close()
 	logger := log.New(file, "", log.LstdFlags)
 	logger.Println("checkSyncAndSave start")
-	wordsInRedis, err := redisWordClient.HGetAll()
+	wordsInRedis, err := redisWordClient.HGetAllWords()
 	if err != nil {
-		logger.Println("redisWordClient.HGetAll error:", err)
+		logger.Println("redisWordClient.HGetAllWords error:", err)
 		return
 	}
 	rows, err := db.Query("SELECT id,word FROM vocabulary")

@@ -41,10 +41,28 @@ func RunHTTPServer(addr string) error {
 
 
 func apiLogin(c *gin.Context) {
-	var req struct {
+	// var req struct {
+	// 	Name string `json:"name"`
+	// 	Pswd string `json:"pswd"`
+	// }
+	// if err := c.ShouldBindJSON(&req); err != nil {
+	// 	req.Name = c.PostForm("name")
+	// 	req.Pswd = c.PostForm("pswd")
+	// }
+	// if req.Name == "" || req.Pswd == "" {
+	// 	respondError(c, http.StatusBadRequest, "name or password is empty")
+	// 	return
+	// }
+	// user, err := userLogin(req.Name, req.Pswd)
+	// if err != nil {
+	// 	respondError(c, http.StatusUnauthorized, err.Error())
+	// 	return
+	// }
+	// respondOK(c, gin.H{"session_id": user.SessionId})
+	req := struct{
 		Name string `json:"name"`
 		Pswd string `json:"pswd"`
-	}
+	}{}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		req.Name = c.PostForm("name")
 		req.Pswd = c.PostForm("pswd")
@@ -58,7 +76,6 @@ func apiLogin(c *gin.Context) {
 		respondError(c, http.StatusUnauthorized, err.Error())
 		return
 	}
-	respondOK(c, gin.H{"session_id": user.SessionId})
 }
 
 func apiRegister(c *gin.Context) {

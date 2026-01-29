@@ -152,13 +152,28 @@ func TagsFromMask(mask int64) []string{
 
 
 
-func QueryWord(word string) (*wordDesc, error){
-	word_desc, err := selectWordByName(word)
+func QueryWords(word ...string) (map[string]*wordDesc, error){
+	wordsInMysql := make([]string,0)
+	wordsToQuery := make([]string,0)
+	for _, w := range word{
+		if _, err := redisClient.HGetWord(w); err != nil{
+			wordsToQuery = append(wordsToQuery, w)
+		}else{
+			wordsInMysql = append(wordsInMysql, w)
+		}
+	}	
+	res, err := selectWordsByNames(wordsInMysql...)
 	if err != nil{
-		//query from llm
-		word_desc, err = GetWordDesc(word)
-		if err != nil{
-			return nil, err
+		return nil, err
+	}
+	//query from llm
+	if len(wordsToQuery) > 0{
+		for _, w := range wordsToQuery{
+			wd, err := GetWordDesc(w)
+			if err != nil{
+				return nil, err
+			}
+			res[w] = wd
 		}
 		//insert into database
 		err = insertWord(word_desc)
@@ -173,8 +188,8 @@ func QueryWord(word string) (*wordDesc, error){
 			return nil, err
 		}
 		//insert into redis
-		if err = redisWordClient.HSet(word_desc.Word,word_desc.WordID); err != nil{
-			log.Fatal("redisWordClient.HSet error:", err)
+		if err = redisWordClient.HSetWord(word_desc.Word,word_desc.WordID); err != nil{
+			log.Fatal("redisWordClient.HSetWord error:", err)
 			return nil, err
 		}
 		return word_desc, err

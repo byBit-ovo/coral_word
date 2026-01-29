@@ -8,7 +8,10 @@ import (
 	"log"
 	_ "strconv"
 
+	"net/http"
+
 	"github.com/byBit-ovo/coral_word/llm"
+	"github.com/gin-gonic/gin"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/google/uuid"
 	"github.com/joho/godotenv"
@@ -41,4 +44,5 @@ func main() {
 	// scaleUpWords(100)
 	// syncMissingFromLogs()
 	// checkSyncLog()
+	words, err := 
 }

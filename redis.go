@@ -8,34 +8,35 @@ import (
 	"strconv"
 )
 
-var redisClient *redis.Client
-type RedisWordClient struct {
+var redisClientBase *redis.Client
+
+type RedisClient struct {
 	client *redis.Client
 }
 
-var redisWordClient *RedisWordClient
+var redisClient *RedisClient
 func InitRedis() error{
-	redisClient = redis.NewClient(&redis.Options{
+	redisClientBase = redis.NewClient(&redis.Options{
 		Addr:     os.Getenv("REDIS_URL"),
 		Password: "",
 		DB:       0,
 	})
-	_, err := redisClient.Ping(context.Background()).Result()
+	_, err := redisClientBase.Ping(context.Background()).Result()
 	if err != nil {
 		log.Fatal("Redis connection error:", err)
 		return err
 	}
-	redisWordClient = &RedisWordClient{client: redisClient}
+	redisClient = &RedisClient{client: redisClientBase}
 	return nil
 }
 
 // word: wordId
-func (client *RedisWordClient) HSet(word string, id int64) error {
+func (client *RedisClient) HSetWord(word string, id int64) error {
 	return client.client.HSet(context.Background(), "coral_word", word, id).Err()
 }
 
 // word: wordId
-func (client *RedisWordClient) HGet(word string) (int64, error) {
+func (client *RedisClient) HGetWord(word string) (int64, error) {
 	res, err := client.client.HGet(context.Background(), "coral_word", word).Result()
 	if err != nil {
 		return 0, err
@@ -44,13 +45,21 @@ func (client *RedisWordClient) HGet(word string) (int64, error) {
 }
 
 // word: wordId
-func (client *RedisWordClient) HGetAll() (map[string]string, error) {
+func (client *RedisClient) HGetAllWords() (map[string]string, error) {
 	return client.client.HGetAll(context.Background(), "coral_word").Result()
 }
-func (client *RedisWordClient) HDel(word string) error {
+func (client *RedisClient) HDelWord(word string) error {
 	return client.client.HDel(context.Background(), "coral_word", word).Err()
 }
 
-func (client *RedisWordClient) HLen() (int64, error) {
+func (client *RedisClient) HLenWords() (int64, error) {
 	return client.client.HLen(context.Background(), "coral_word").Result()
 }
+
+func (client *RedisClient) SetUserSession(sessionId string, userId string) error {
+	return client.client.HSet(context.Background(), "coral_word_session:",sessionId, userId).Err()
+}
+func (client *RedisClient) GetUserSession(sessionId string) (string, error) {
+	return client.client.HGet(context.Background(), "coral_word_session:",sessionId).Result()
+}
+

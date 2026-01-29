@@ -32,6 +32,7 @@ func (user *User) CreateWordNote(wordName string, note string) error {
 	}
 	return wordNote.CreateWordNote()
 }
+
 // test over
 func (user *User) UpdateWordNote(wordName string, note string) error {
 	word_desc, err := QueryWord(wordName)
@@ -45,6 +46,7 @@ func (user *User) UpdateWordNote(wordName string, note string) error {
 	}
 	return wordNote.UpdateWordNote()
 }
+
 // test over
 func (user *User) DeleteWordNote(wordName string) error {
 	word_desc, err := QueryWord(wordName)
@@ -52,17 +54,18 @@ func (user *User) DeleteWordNote(wordName string) error {
 		return err
 	}
 	wordNote := WordNote{
-		WordID: word_desc.WordID,
-		UserID: user.Id,
-		Note: "",
+		WordID:   word_desc.WordID,
+		UserID:   user.Id,
+		Note:     "",
 		Selected: false,
 	}
 	return wordNote.DeleteWordNote()
 }
+
 // test over
 func (user *User) GetWordNote(wordName string) (*WordNote, error) {
 	word_desc, err := QueryWord(wordName)
-	if err != nil {	
+	if err != nil {
 		return nil, err
 	}
 	wordNote := WordNote{
@@ -75,7 +78,8 @@ func (user *User) GetWordNote(wordName string) (*WordNote, error) {
 	}
 	return &wordNote, nil
 }
-//test over
+
+// test over
 func (user *User) AppendWordNote(wordName string, note string) error {
 	word_desc, err := QueryWord(wordName)
 	if err != nil {
@@ -87,6 +91,7 @@ func (user *User) AppendWordNote(wordName string, note string) error {
 	}
 	return wordNote.AppendNote(note)
 }
+
 // function for administrator to set selected word note
 // test over
 func (user *User) SetSelectedWordNote(wordName string, selected bool) error {
@@ -96,8 +101,8 @@ func (user *User) SetSelectedWordNote(wordName string, selected bool) error {
 		return err
 	}
 	wordNote := WordNote{
-		WordID: word_desc.WordID,
-		UserID: user.Id,
+		WordID:   word_desc.WordID,
+		UserID:   user.Id,
 		Selected: selected,
 	}
 	return wordNote.SetSelectedWordNote(selected)
@@ -107,6 +112,7 @@ func (user *User) GetSelectedWordNotes(wordName string) ([]WordNote, error) {
 
 	return GetSelectedWordNotes(wordName)
 }
+
 // test over
 func (user *User) reviewWords() {
 	Uniquewords := StartReview(user.SessionId)
@@ -197,17 +203,27 @@ func listNoteWords(uid string) error {
 	}
 	userNoteWords[uid] = noteWords
 
+	var allWordIDs []int64
+	seen := make(map[int64]struct{})
 	for _, words := range userNoteWords[uid] {
-
 		for _, word_id := range words {
-			word_desc, err := selectWordById(word_id)
-			if err != nil {
-				fmt.Println("select word error:", word_id, err.Error())
+			if _, ok := seen[word_id]; ok {
 				continue
 			}
-			wordsPool[word_id] = word_desc
-			wordNameToID[word_desc.Word] = word_id
+			seen[word_id] = struct{}{}
+			allWordIDs = append(allWordIDs, word_id)
 		}
+	}
+	if len(allWordIDs) == 0 {
+		return nil
+	}
+	wordMap, err := selectWordsByIds(allWordIDs...)
+	if err != nil {
+		return err
+	}
+	for wordID, wordDesc := range wordMap {
+		wordsPool[wordID] = wordDesc
+		wordNameToID[wordDesc.Word] = wordID
 	}
 	return nil
 }
@@ -220,12 +236,12 @@ func userLogin(name, pswd string) (*User, error) {
 		return nil, errors.New("incorrect password")
 	}
 	sessionId := uuid.New().String()
-	userSession[sessionId] = user.Id
-	user.SessionId = sessionId
+	err = redisWordClient.SetUserSession(sessionId, user.Id)
+	if err != nil {
+		return nil, err
+	}
 	listNoteWords(user.Id)
-
-	// fmt.Println("Login successfully!")
-	return user, nil
+	return &User{user.Id, user.Name, user.Pswd, sessionId}, nil
 }
 
 func selectUser(name string) (*User, error) {
@@ -273,5 +289,3 @@ func insertUser(name, pswd string) (*User, error) {
 	}
 	return &User{id, name, pswd, ""}, nil
 }
-
-
